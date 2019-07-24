@@ -127,6 +127,11 @@ def get_matched_calib(data):
     matched_eye1 = calibrate.preprocess_2d_data_monocular(matched_eye1)
     matched_eye1 = np.array(matched_eye1)
     
+    # This block undistorts the gaze. Probably shouldn't be
+    # used at least yet, as the rest of the pupil pipeline works
+    # with distorted coordinates until the surface markers are handled.
+    # Also uses -1 to 1 coordinate system instead of 0 to 1
+    """
     refs = matched_eye1[:,[2,3]]*screen_size
     refs = camera.unprojectPoints(refs, normalize=False)[:,:-1]
     #refs += 1.0; refs /= 2.0
@@ -135,6 +140,7 @@ def get_matched_calib(data):
     refs = camera.unprojectPoints(refs, normalize=False)[:,:-1]
     #refs += 1.0; refs /= 2.0
     matched_eye0[:,[2,3]] = np.arctan(refs)
+    """
     
     matched_eye0 = pd.DataFrame.from_records(matched_eye0, columns=["pupil_x", "pupil_y", "target_x", "target_y"])
     matched_eye0['confidence'] = confidence0
