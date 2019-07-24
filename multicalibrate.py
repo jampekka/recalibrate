@@ -50,6 +50,7 @@ def load_session(pupil_log, time_delta=0):
 
     for line in lines:
         topic, ts, data = line
+        data['recv_ts'] = ts
         if topic == "pupil.0":
             pupils[0].append(data)
         if topic == "pupil.1":
@@ -183,17 +184,18 @@ def recalibrate_session(pupil_log, outpath):
     interps = []
     for mt, mapping in mappings:
         for m, pupil in zip(mapping, pupils):
-            t, x, y, c = zip(*(
-                    (p['timestamp'], *p['norm_pos'], p['confidence'])
+            t, x, y, c, rt = zip(*(
+                    (p['timestamp'], *p['norm_pos'], p['confidence'], p['recv_ts'])
                     for p in pupil))
             t = np.array(t)
             c = np.array(c)
+            rt = np.array(rt)
             # Be a bit pessimistic on the quality as we'll interpolate
             c = -maximum_filter1d(-c, 4)
             g = np.array(m(np.array([x, y])))
             x, y = g
             interp = interp1d(t,
-                    np.array([x, y, c, t - mt]).T,
+                    np.array([x, y, c, t - mt, rt]).T,
                     axis=0, bounds_error=False)
             interps.append(interp)
     
@@ -209,6 +211,12 @@ def recalibrate_session(pupil_log, outpath):
     data = data[:,valid]
     pos = data[:,:,:2]
     q = data[:,:,2]
+
+    # TODO: There seems to be around 0.1 s lag and a bit
+    # weirdly shaped around 0.05 s jtter between
+    # pupil and recv times. Probably want to resynchronize
+    # for very time-sensitive analyses.
+    rts = data[0,:,4]
     
     # dws is the weight based on how far in time the
     # moment is from the given calibration sessions
@@ -227,14 +235,15 @@ def recalibrate_session(pupil_log, outpath):
     
     pack = lambda x: msgpack.packb(x, use_bin_type=True)
     with open(outpath, 'wb') as out:
-        for t, pos, conf in zip(ts, mean, ws):
+        for t, rt, pos, conf in zip(ts, rts, mean, ws):
             row = dict(
                     topic=topic,
                     norm_pos=pos.tolist(),
                     confidence=conf,
-                    timestamp=t)
+                    timestamp=t,
+                    recv_ts=rt)
             out.write(pack([topic, pack(row)]))
-
+    
     """
     mean[ws < 0.5] = np.nan
     for mq, mp in zip(dws*q*dws.shape[0], pos):
@@ -247,7 +256,7 @@ def recalibrate_session(pupil_log, outpath):
     #plt.plot(ts, disagreement)
     plt.show()
     """
-        
+    
     
 
 if __name__ == '__main__':
